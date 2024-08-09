@@ -54,6 +54,8 @@ struct SynthesisConfig {
   float noiseScale = 0.667f;
   float lengthScale = 1.0f;
   float noiseW = 0.8f;
+    std::optional<float> pauseDurationSeconds; // Duration of inserted pauses
+    std::optional<std::set<Phoneme>> pausePhonemes;
 
   // Audio settings
   int sampleRate = 22050;
