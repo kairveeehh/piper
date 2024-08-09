@@ -20,25 +20,25 @@ namespace piper {
 // https://stackoverflow.com/questions/47346133/how-to-use-a-define-inside-a-format-string
 #define _STR(x) #x
 #define STR(x) _STR(x)
-const std::string VERSION = STR(_PIPER_VERSION);
+const string VERSION = STR(_PIPER_VERSION);
 #else
-const std::string VERSION = "";
+const string VERSION = "";
 #endif
 
 // Maximum value for 16-bit signed WAV sample
 const float MAX_WAV_VALUE = 32767.0f;
 
-const std::string instanceName{"piper"};
+const string instanceName{"piper"};
 
-std::string getVersion() { return VERSION; }
+string getVersion() { return VERSION; }
 
 // True if the string is a single UTF-8 codepoint
-bool isSingleCodepoint(std::string s) {
+bool isSingleCodepoint(string s) {
   return utf8::distance(s.begin(), s.end()) == 1;
 }
 
 // Get the first UTF-8 codepoint of a string
-Phoneme getCodepoint(std::string s) {
+Phoneme getCodepoint(string s) {
   utf8::iterator character_iter(s.begin(), s.begin(), s.end());
   return *character_iter;
 }
@@ -61,12 +61,12 @@ void parsePhonemizeConfig(json &configRoot, PhonemizeConfig &phonemizeConfig) {
   if (configRoot.contains("espeak")) {
     auto espeakValue = configRoot["espeak"];
     if (espeakValue.contains("voice")) {
-      phonemizeConfig.eSpeak.voice = espeakValue["voice"].get<std::string>();
+      phonemizeConfig.eSpeak.voice = espeakValue["voice"].get<string>();
     }
   }
 
   if (configRoot.contains("phoneme_type")) {
-    auto phonemeTypeStr = configRoot["phoneme_type"].get<std::string>();
+    auto phonemeTypeStr = configRoot["phoneme_type"].get<string>();
     if (phonemeTypeStr == "text") {
       phonemizeConfig.phonemeType = TextPhonemes;
     }
@@ -77,9 +77,9 @@ void parsePhonemizeConfig(json &configRoot, PhonemizeConfig &phonemizeConfig) {
   if (configRoot.contains("phoneme_id_map")) {
     auto phonemeIdMapValue = configRoot["phoneme_id_map"];
     for (auto &fromPhonemeItem : phonemeIdMapValue.items()) {
-      std::string fromPhoneme = fromPhonemeItem.key();
+      string fromPhoneme = fromPhonemeItem.key();
       if (!isSingleCodepoint(fromPhoneme)) {
-        std::stringstream idsStr;
+        stringstream idsStr;
         for (auto &toIdValue : fromPhonemeItem.value()) {
           PhonemeId toId = toIdValue.get<PhonemeId>();
           idsStr << toId << ",";
@@ -87,7 +87,7 @@ void parsePhonemizeConfig(json &configRoot, PhonemizeConfig &phonemizeConfig) {
 
         spdlog::error("\"{}\" is not a single codepoint (ids={})", fromPhoneme,
                       idsStr.str());
-        throw std::runtime_error(
+        throw runtime_error(
             "Phonemes must be one codepoint (phoneme id map)");
       }
 
@@ -108,18 +108,18 @@ void parsePhonemizeConfig(json &configRoot, PhonemizeConfig &phonemizeConfig) {
 
     auto phonemeMapValue = configRoot["phoneme_map"];
     for (auto &fromPhonemeItem : phonemeMapValue.items()) {
-      std::string fromPhoneme = fromPhonemeItem.key();
+      string fromPhoneme = fromPhonemeItem.key();
       if (!isSingleCodepoint(fromPhoneme)) {
         spdlog::error("\"{}\" is not a single codepoint", fromPhoneme);
-        throw std::runtime_error(
+        throw runtime_error(
             "Phonemes must be one codepoint (phoneme map)");
       }
 
       auto fromCodepoint = getCodepoint(fromPhoneme);
       for (auto &toPhonemeValue : fromPhonemeItem.value()) {
-        std::string toPhoneme = toPhonemeValue.get<std::string>();
+        string toPhoneme = toPhonemeValue.get<string>();
         if (!isSingleCodepoint(toPhoneme)) {
-          throw std::runtime_error(
+          throw runtime_error(
               "Phonemes must be one codepoint (phoneme map)");
         }
 
@@ -162,7 +162,9 @@ void parseSynthesisConfig(json &configRoot, SynthesisConfig &synthesisConfig) {
     if (inferenceValue.contains("noise_scale")) {
       synthesisConfig.noiseScale = inferenceValue.value("noise_scale", 0.667f);
     }
-
+  if (inferenceValue.contains("pause_duration")) {
+            synthesisConfig.pauseDurationSeconds = inferenceValue.value("pause_duration", 0.2f);
+        }
     if (inferenceValue.contains("length_scale")) {
       synthesisConfig.lengthScale = inferenceValue.value("length_scale", 1.0f);
     }
@@ -170,16 +172,22 @@ void parseSynthesisConfig(json &configRoot, SynthesisConfig &synthesisConfig) {
     if (inferenceValue.contains("noise_w")) {
       synthesisConfig.noiseW = inferenceValue.value("noise_w", 0.8f);
     }
+     if (inferenceValue.contains("pause_phonemes")) {
+            synthesisConfig.pausePhonemes.emplace();
+            for (const auto& phoneme : inferenceValue["pause_phonemes"]) {
+                synthesisConfig.pausePhonemes->insert(getCodepoint(phoneme.get<string>()));
+            }
+        }
 
     if (inferenceValue.contains("phoneme_silence")) {
       // phoneme -> seconds of silence to add after
       synthesisConfig.phonemeSilenceSeconds.emplace();
       auto phonemeSilenceValue = inferenceValue["phoneme_silence"];
       for (auto &phonemeItem : phonemeSilenceValue.items()) {
-        std::string phonemeStr = phonemeItem.key();
+        string phonemeStr = phonemeItem.key();
         if (!isSingleCodepoint(phonemeStr)) {
           spdlog::error("\"{}\" is not a single codepoint", phonemeStr);
-          throw std::runtime_error(
+          throw runtime_error(
               "Phonemes must be one codepoint (phoneme silence)");
         }
 
@@ -205,7 +213,7 @@ void parseModelConfig(json &configRoot, ModelConfig &modelConfig) {
 
     auto speakerIdMapValue = configRoot["speaker_id_map"];
     for (auto &speakerItem : speakerIdMapValue.items()) {
-      std::string speakerName = speakerItem.key();
+      string speakerName = speakerItem.key();
       (*modelConfig.speakerIdMap)[speakerName] =
           speakerItem.value().get<SpeakerId>();
     }
@@ -223,7 +231,7 @@ void initialize(PiperConfig &config) {
                                    /*path*/ config.eSpeakDataPath.c_str(),
                                    /*options*/ 0);
     if (result < 0) {
-      throw std::runtime_error("Failed to initialize eSpeak-ng");
+      throw runtime_error("Failed to initialize eSpeak-ng");
     }
 
     spdlog::debug("Initialized eSpeak");
@@ -234,12 +242,12 @@ void initialize(PiperConfig &config) {
   if (config.useTashkeel) {
     spdlog::debug("Using libtashkeel for diacritization");
     if (!config.tashkeelModelPath) {
-      throw std::runtime_error("No path to libtashkeel model");
+      throw runtime_error("No path to libtashkeel model");
     }
 
     spdlog::debug("Loading libtashkeel model from {}",
                   config.tashkeelModelPath.value());
-    config.tashkeelState = std::make_unique<tashkeel::State>();
+    config.tashkeelState = make_unique<tashkeel::State>();
     tashkeel::tashkeel_load(config.tashkeelModelPath.value(),
                             *config.tashkeelState);
     spdlog::debug("Initialized libtashkeel");
@@ -259,7 +267,7 @@ void terminate(PiperConfig &config) {
   spdlog::info("Terminated piper");
 }
 
-void loadModel(std::string modelPath, ModelSession &session, bool useCuda) {
+void loadModel(string modelPath, ModelSession &session, bool useCuda) {
   spdlog::debug("Loading onnx model from {}", modelPath);
   session.env = Ort::Env(OrtLoggingLevel::ORT_LOGGING_LEVEL_WARNING,
                          instanceName.c_str());
@@ -289,10 +297,10 @@ void loadModel(std::string modelPath, ModelSession &session, bool useCuda) {
   session.options.DisableMemPattern();
   session.options.DisableProfiling();
 
-  auto startTime = std::chrono::steady_clock::now();
+  auto startTime = chrono::steady_clock::now();
 
 #ifdef _WIN32
-  auto modelPathW = std::wstring(modelPath.begin(), modelPath.end());
+  auto modelPathW = wstring(modelPath.begin(), modelPath.end());
   auto modelPathStr = modelPathW.c_str();
 #else
   auto modelPathStr = modelPath.c_str();
@@ -300,17 +308,17 @@ void loadModel(std::string modelPath, ModelSession &session, bool useCuda) {
 
   session.onnx = Ort::Session(session.env, modelPathStr, session.options);
 
-  auto endTime = std::chrono::steady_clock::now();
+  auto endTime = chrono::steady_clock::now();
   spdlog::debug("Loaded onnx model in {} second(s)",
-                std::chrono::duration<double>(endTime - startTime).count());
+                chrono::duration<double>(endTime - startTime).count());
 }
 
 // Load Onnx model and JSON config file
-void loadVoice(PiperConfig &config, std::string modelPath,
-               std::string modelConfigPath, Voice &voice,
-               std::optional<SpeakerId> &speakerId, bool useCuda) {
+void loadVoice(PiperConfig &config, string modelPath,
+               string modelConfigPath, Voice &voice,
+               optional<SpeakerId> &speakerId, bool useCuda) {
   spdlog::debug("Parsing voice config at {}", modelConfigPath);
-  std::ifstream modelConfigFile(modelConfigPath);
+  ifstream modelConfigFile(modelConfigPath);
   voice.configRoot = json::parse(modelConfigFile);
 
   parsePhonemizeConfig(voice.configRoot, voice.phonemizeConfig);
@@ -439,7 +447,32 @@ void synthesize(std::vector<PhonemeId> &phonemeIds,
     Ort::detail::OrtRelease(inputTensors[i].release());
   }
 }
+bool isPauseWorthy(const Phoneme& phoneme, const optional<set<Phoneme>>& pausePhonemes) {
+    if (pausePhonemes && pausePhonemes->count(phoneme) > 0) {
+        return true;
+    }
+    
+    static const set<Phoneme> defaultPauseWorthy = {',', '.', '!', '?'};
+    static const set<string> fillerWords = {"um", "uh"};
+    
+    if (defaultPauseWorthy.count(phoneme) > 0) {
+        return true;
+    }
+    
+    string phonemeStr;
+    utf8::append(phoneme, back_inserter(phonemeStr));
+    return fillerWords.count(phonemeStr) > 0;
+}
 
+void insertPause(vector<PhonemeId>& phonemeIds, const SynthesisConfig& config) {
+    if (!config.pauseDurationSeconds) {
+        return;
+    }
+
+    int pauseSamples = static_cast<int>(*config.pauseDurationSeconds * config.sampleRate);
+    PhonemeId pauseId = config.phonemeIdMap.at('_')[0];  // Assuming '_' represents silence
+    phonemeIds.insert(phonemeIds.end(), pauseSamples, pauseId);
+}
 // ----------------------------------------------------------------------------
 
 // Phonemize text and synthesize audio
@@ -554,20 +587,30 @@ void textToAudio(PiperConfig &config, Voice &voice, std::string text,
       // phonemes -> ids
       phonemes_to_ids(*(phrasePhonemes[phraseIdx]), idConfig, phonemeIds,
                       missingPhonemes);
+      
+      // Insert pauses
+      std::vector<PhonemeId> phonemeIdsWithPauses;
+      for (const auto &phonemeId : phonemeIds) {
+        phonemeIdsWithPauses.push_back(phonemeId);
+        if (isPauseWorthy(phonemeId, voice.synthesisConfig.pausePhonemes)) {
+          insertPause(phonemeIdsWithPauses, voice.synthesisConfig);
+        }
+      }
+      
       if (spdlog::should_log(spdlog::level::debug)) {
         // DEBUG log for phoneme ids
         std::stringstream phonemeIdsStr;
-        for (auto phonemeId : phonemeIds) {
+        for (auto phonemeId : phonemeIdsWithPauses) {
           phonemeIdsStr << phonemeId << ", ";
         }
 
-        spdlog::debug("Converted {} phoneme(s) to {} phoneme id(s): {}",
-                      phrasePhonemes[phraseIdx]->size(), phonemeIds.size(),
+        spdlog::debug("Converted {} phoneme(s) to {} phoneme id(s) with pauses: {}",
+                      phrasePhonemes[phraseIdx]->size(), phonemeIdsWithPauses.size(),
                       phonemeIdsStr.str());
       }
 
       // ids -> audio
-      synthesize(phonemeIds, voice.synthesisConfig, voice.session, audioBuffer,
+      synthesize(phonemeIdsWithPauses, voice.synthesisConfig, voice.session, audioBuffer,
                  phraseResults[phraseIdx]);
 
       // Add end of phrase silence
@@ -612,14 +655,13 @@ void textToAudio(PiperConfig &config, Voice &voice, std::string text,
   if (result.audioSeconds > 0) {
     result.realTimeFactor = result.inferSeconds / result.audioSeconds;
   }
-
 } /* textToAudio */
 
 // Phonemize text and synthesize audio to WAV file
-void textToWavFile(PiperConfig &config, Voice &voice, std::string text,
-                   std::ostream &audioFile, SynthesisResult &result) {
+void textToWavFile(PiperConfig &config, Voice &voice, string text,
+                   ostream &audioFile, SynthesisResult &result) {
 
-  std::vector<int16_t> audioBuffer;
+  vector<int16_t> audioBuffer;
   textToAudio(config, voice, text, audioBuffer, result, NULL);
 
   // Write WAV
